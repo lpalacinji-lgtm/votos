@@ -49,33 +49,49 @@ if st.session_state.fase == "formulario":
 # FASE 2: ESCANEO
 elif st.session_state.fase == "escaneo":
     st.title("📷 Escanear código de barras")
-    st.markdown("Apunta la cámara al código. El contenido se insertará automáticamente.")
+    st.markdown("Apunta la cámara al código de barras del certificado electoral.")
 
-    # Escáner HTML5 en iframe con permisos
+    # Escáner con QuaggaJS para códigos de barras lineales
     components.html(
         """
         <iframe srcdoc='
-            <html>
-            <head>
-                <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-            </head>
-            <body>
-                <div id="reader" style="width: 300px;"></div>
-                <p id="result">Esperando escaneo...</p>
-                <script>
-                    function onScanSuccess(decodedText, decodedResult) {
-                        document.getElementById("result").innerText = decodedText;
-                        window.parent.postMessage(decodedText, "*");
+        <html>
+        <head>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+        </head>
+        <body>
+            <div id="scanner" style="width: 100%; height: 300px;"></div>
+            <p id="result">Esperando escaneo...</p>
+            <script>
+                Quagga.init({
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        target: document.querySelector("#scanner"),
+                        constraints: {
+                            facingMode: "environment"
+                        }
+                    },
+                    decoder: {
+                        readers: ["code_128_reader", "ean_reader", "ean_8_reader"]
                     }
-                    new Html5Qrcode("reader").start(
-                        { facingMode: "environment" },
-                        { fps: 10, qrbox: 250 },
-                        onScanSuccess
-                    );
-                </script>
-            </body>
-            </html>'
-            width="100%" height="400" style="border:none;" allow="camera">
+                }, function(err) {
+                    if (err) {
+                        document.getElementById("result").innerText = "Error: " + err;
+                        return;
+                    }
+                    Quagga.start();
+                });
+
+                Quagga.onDetected(function(data) {
+                    const code = data.codeResult.code;
+                    document.getElementById("result").innerText = code;
+                    window.parent.postMessage(code, "*");
+                });
+            </script>
+        </body>
+        </html>'
+        width="100%" height="400" style="border:none;" allow="camera">
         </iframe>
         """,
         height=420,
@@ -92,7 +108,7 @@ elif st.session_state.fase == "escaneo":
             st.experimental_set_query_params()
             st.rerun()
 
-    # Escucha JS para insertar el código en la URL
+    # Listener para recibir el código escaneado
     st.markdown(
         """
         <script>
