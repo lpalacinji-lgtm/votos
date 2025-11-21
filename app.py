@@ -1,6 +1,6 @@
 import streamlit as st
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import datetime
 import streamlit.components.v1 as components
@@ -8,9 +8,9 @@ import streamlit.components.v1 as components
 # Configuración de la página
 st.set_page_config(page_title="Formulario con escaneo", layout="centered")
 
-# Conexión con Google Sheets
+# Autenticación con Google Sheets usando st.secrets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
 client = gspread.authorize(creds)
 
 # Acceso a las hojas
@@ -51,25 +51,34 @@ elif st.session_state.fase == "escaneo":
     st.title("📷 Escanear código de barras")
     st.markdown("Apunta la cámara al código. El contenido se insertará automáticamente.")
 
-    # Escáner HTML5
+    # Escáner HTML5 en iframe con permisos
     components.html(
         """
-        <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-        <div id="reader" style="width: 300px;"></div>
-        <p id="result">Esperando escaneo...</p>
-        <script>
-            function onScanSuccess(decodedText, decodedResult) {
-                document.getElementById("result").innerText = decodedText;
-                window.parent.postMessage(decodedText, "*");
-            }
-            new Html5Qrcode("reader").start(
-                { facingMode: "environment" },
-                { fps: 10, qrbox: 250 },
-                onScanSuccess
-            );
-        </script>
+        <iframe srcdoc='
+            <html>
+            <head>
+                <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+            </head>
+            <body>
+                <div id="reader" style="width: 300px;"></div>
+                <p id="result">Esperando escaneo...</p>
+                <script>
+                    function onScanSuccess(decodedText, decodedResult) {
+                        document.getElementById("result").innerText = decodedText;
+                        window.parent.postMessage(decodedText, "*");
+                    }
+                    new Html5Qrcode("reader").start(
+                        { facingMode: "environment" },
+                        { fps: 10, qrbox: 250 },
+                        onScanSuccess
+                    );
+                </script>
+            </body>
+            </html>'
+            width="100%" height="400" style="border:none;" allow="camera">
+        </iframe>
         """,
-        height=400,
+        height=420,
     )
 
     # Captura del código desde la URL
@@ -80,7 +89,7 @@ elif st.session_state.fase == "escaneo":
         if st.session_state.get("fase") != "confirmar":
             st.session_state.codigo_escaneado = codigo
             st.session_state.fase = "confirmar"
-            st.experimental_set_query_params()  # Limpia la URL
+            st.experimental_set_query_params()
             st.rerun()
 
     # Escucha JS para insertar el código en la URL
@@ -114,5 +123,5 @@ elif st.session_state.fase == "confirmar":
         ])
         st.success("✅ Registro guardado correctamente.")
         st.session_state.fase = "formulario"
-        st.experimental_set_query_params()  # Limpia la URL
+        st.experimental_set_query_params()
         st.rerun()
