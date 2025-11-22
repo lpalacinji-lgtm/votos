@@ -126,9 +126,10 @@ elif st.session_state.fase == "escaneo":
         height=420,
     )
 
-    # Parámetros URL
-    params = st.query_params
-    codigo = params.get("codigo", [None])[0]
+# Parámetros URL (CORRECTO)
+params = st.experimental_get_query_params()
+codigo = params.get("codigo", [None])[0]
+
 
     if codigo:
         st.session_state.codigo_escaneado = codigo
@@ -200,4 +201,5 @@ elif st.session_state.fase == "confirmar":
         st.session_state.fase = "formulario"
         st.experimental_set_query_params()
         st.rerun()
+
 
