@@ -215,6 +215,8 @@ elif st.session_state.fase == "escaneo":
 # ======================================
 # FASE 4: CONFIRMAR Y GUARDAR (UTC-5 COLOMBIA)
 # ======================================
+st.write(df_reg.columns.tolist())
+
 elif st.session_state.fase == "confirmar":
     st.title("✅ Confirmar registro")
 
@@ -297,6 +299,7 @@ elif st.session_state.fase == "confirmar":
 
         st.session_state.fase = "formulario"
         st.rerun()
+
 
 
 
