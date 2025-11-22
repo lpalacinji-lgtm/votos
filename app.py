@@ -91,99 +91,123 @@ elif st.session_state.fase == "nuevo_registro":
         st.rerun()
 
 # ======================================
-# FASE 3: ESCANEO CON CÁMARA (MEJORADO)
+# FASE 3: ESCANEO
 # ======================================
 elif st.session_state.fase == "escaneo":
     st.title("📷 Escanear código de barras")
     st.markdown("Apunta la cámara al código del certificado electoral.")
 
-    # Cámara + ZXing
+    # Inicializar lista de códigos si no existe
+    if "codigos_escaneados" not in st.session_state:
+        st.session_state.codigos_escaneados = []
+
+    # Zona donde se mostrará el código
+    codigo_placeholder = st.empty()
+    boton_placeholder = st.empty()
+    sonido = """
+        <audio id="beep">
+            <source src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" type="audio/ogg">
+        </audio>
+    """
+
+    st.markdown(sonido, unsafe_allow_html=True)
+
+    # IFRAME DEL ESCÁNER
     components.html(
         """
         <html>
-        <head>
-            <script src="https://unpkg.com/@zxing/library@latest"></script>
-            <style>
-                video {
-                    width: 100%;
-                    max-height: 320px;
-                    border: 2px solid #4CAF50;
-                    border-radius: 10px;
-                }
-                #result {
-                    font-size: 22px;
-                    font-weight: bold;
-                    margin-top: 10px;
-                    text-align: center;
-                    color: #4CAF50;
-                }
-            </style>
-        </head>
-        <body>
-            <video id="video"></video>
-            <p id="result">Escaneando...</p>
+        <body style="margin:0">
+            <video id="video" width="100%" height="280" style="border:1px solid gray; border-radius:10px;"></video>
+            <br>
+            <button id="flashBtn" style="padding:8px;border-radius:8px;margin-top:6px;">
+                🔦 Flash ON/OFF
+            </button>
+
+            <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
 
             <script>
+                const codeReader = new ZXing.BrowserBarcodeReader();
+                let currentStream = null;
+
                 async function startScanner() {
-                    try {
-                        const codeReader = new ZXing.BrowserBarcodeReader();
+                    currentStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: "environment" }
+                    });
 
-                        codeReader.decodeFromVideoDevice(null, "video", (res, err) => {
-                            if (res) {
-                                document.getElementById("result").innerText = res.text;
+                    document.getElementById("video").srcObject = currentStream;
 
-                                // Enviar código a Streamlit
-                                window.parent.postMessage(res.text, "*");
+                    codeReader.decodeFromVideoDevice(null, "video", (result, err) => {
+                        if (result) {
+                            // Reproduce sonido
+                            document.getElementById("beep").play();
 
-                                // Pausar cámara
-                                codeReader.reset();
-                            }
-                        });
-                    } catch (error) {
-                        document.getElementById("result").innerText =
-                            "Error accediendo a la cámara: " + error;
-                    }
+                            // Enviar a Streamlit
+                            window.parent.postMessage(
+                                JSON.stringify({codigo: result.text}),
+                                "*"
+                            );
+                        }
+                    });
                 }
 
                 startScanner();
+
+                // Flash ON/OFF
+                document.getElementById("flashBtn").onclick = () => {
+                    const track = currentStream.getVideoTracks()[0];
+                    const capabilities = track.getCapabilities();
+
+                    if (capabilities.torch) {
+                        const current = track.getSettings().torch || false;
+                        track.applyConstraints({ advanced: [{ torch: !current }] });
+                    } else {
+                        alert("Este dispositivo no soporta flash.");
+                    }
+                };
             </script>
         </body>
         </html>
         """,
-        height=450,
+        height=380
     )
 
-    # Recibir código desde JS
-    params = st.query_params
-    codigo = params.get("codigo", [None])[0]
-
-    # Si llega un código → Mostrar en pantalla + botón continuar
-    if codigo:
-        st.session_state.codigo_detectado = codigo
-
-        st.success(f"✔ Código escaneado: {codigo}")
-
-        # BOTÓN PARA CONTINUAR
-        if st.button("➡ CONTINUAR / VALIDAR CÓDIGO", type="primary"):
-            st.session_state.codigo_escaneado = codigo
-            st.session_state.fase = "confirmar"
-            st.experimental_set_query_params()  # limpia URL
-            st.rerun()
-
-    # Listener JS → Streamlit
+    # JS PARA RECIBIR EL CÓDIGO
     st.markdown(
         """
         <script>
         window.addEventListener("message", (event) => {
-            const codigo = event.data;
-            const url = new URL(window.location);
-            url.searchParams.set("codigo", codigo);
-            window.location.href = url.toString();
+            const data = JSON.parse(event.data);
+            const codigo = data.codigo;
+
+            // Llamar a Streamlit
+            window.parent.postMessage(
+              { isStreamlitMessage: true, type: "streamlit:setComponentValue", value: codigo },
+              "*"
+            );
         });
         </script>
         """,
         unsafe_allow_html=True,
     )
+
+    # ESCUCHAMOS EL CÓDIGO
+    codigo = st.experimental_get_query_params().get("codigo_manual", [None])[0]
+
+    # Streamlit recibe mensajes enviados desde JS
+    if codigo := st.session_state.get("component_value"):
+        # Mostrar código
+        codigo_placeholder.success(f"📌 Código detectado: **{codigo}**")
+
+        # Validar repetido
+        if codigo in st.session_state.codigos_escaneados:
+            boton_placeholder.error("⚠️ Este código ya fue registrado.")
+        else:
+            # Botón continuar
+            if boton_placeholder.button("Continuar ➜", type="primary"):
+                st.session_state.codigos_escaneados.append(codigo)
+                st.session_state.codigo_escaneado = codigo
+                st.session_state.fase = "confirmar"
+                st.rerun()
 
 # ======================================
 # FASE 4: INGRESO MANUAL
@@ -227,5 +251,6 @@ elif st.session_state.fase == "confirmar":
         st.session_state.fase = "formulario"
         st.experimental_set_query_params()
         st.rerun()
+
 
 
