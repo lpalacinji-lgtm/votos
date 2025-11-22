@@ -123,21 +123,19 @@ elif st.session_state.fase == "nuevo_registro":
 # -------------------------------
 elif st.session_state.fase == "escaneo":
     st.title("📷 Escanear código de barras")
-    st.markdown("Apunta la cámara al código del certificado electoral.")
+    st.markdown("Apunta la cámara al código. Cuando suene, aparecerá el botón para continuar.")
 
-    # placeholders
     placeholder_result = st.empty()
     placeholder_button = st.empty()
 
-    # Sonido (recurso externo)
+    # Audio del beep
     st.markdown("""
         <audio id="beep" style="display:none">
             <source src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg" type="audio/ogg">
         </audio>
     """, unsafe_allow_html=True)
 
-    # Escáner (ZXing) dentro del componente HTML.
-    # Nota: components.html crea un iframe; funciona en la mayoría de navegadores.
+    # ESCÁNER
     components.html(
         """
         <html>
@@ -145,7 +143,6 @@ elif st.session_state.fase == "escaneo":
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <script src="https://unpkg.com/@zxing/library@latest"></script>
             <style>
-                body { margin:0; padding:0; }
                 video { width:100%; height:260px; border-radius:10px; border:1px solid #ddd; }
             </style>
         </head>
@@ -153,23 +150,16 @@ elif st.session_state.fase == "escaneo":
             <video id="video" autoplay muted playsinline></video>
             <script>
                 (async () => {
-                    try {
-                        const codeReader = new ZXing.BrowserBarcodeReader();
-                        // usamos decodeFromVideoDevice que repetidamente busca códigos
-                        codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
-                            if (result) {
-                                // reproducir sonido si está disponible
-                                try { parent.document.getElementById('beep')?.play(); } catch(e) {}
-                                // enviar el texto al padre
-                                window.parent.postMessage(JSON.stringify({type: 'codigo', value: result.text}), "*");
-                                // opcional: detener lectura (se puede quitar para lecturas continuas)
-                                codeReader.reset();
-                            }
-                        });
-                    } catch (error) {
-                        // enviar error al padre (no crítico)
-                        window.parent.postMessage(JSON.stringify({type: 'error', value: String(error)}), "*");
-                    }
+                    const codeReader = new ZXing.BrowserBarcodeReader();
+                    codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
+                        if (result) {
+                            parent.document.getElementById('beep').play();
+                            window.parent.postMessage(
+                                {type:'codigo_leido', codigo: result.text}, "*"
+                            );
+                            codeReader.reset();
+                        }
+                    });
                 })();
             </script>
         </body>
@@ -178,76 +168,56 @@ elif st.session_state.fase == "escaneo":
         height=320,
     )
 
-    # Script receptor en la página principal (fuera del iframe) que convierte el postMessage en parámetro URL
-    # (Este patrón funciona de forma estable en Streamlit y permite leer el valor con experimental_get_query_params)
-    st.markdown(
-        """
+    # Capturar el mensaje del iframe → guardar en sesión sin usar URL
+    st.markdown("""
         <script>
-        window.addEventListener("message", (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data && data.type === "codigo") {
-                    const codigo = data.value;
+            window.addEventListener("message", (event) => {
+                if (event.data?.type === "codigo_leido") {
+                    const code = event.data.codigo;
+                    const payload = {codigo: code};
                     const url = new URL(window.location);
-                    // ponemos el parámetro 'codigo' para que Streamlit lo lea
-                    url.searchParams.set("codigo", codigo);
+                    url.searchParams.set("capturado", JSON.stringify(payload));
                     window.location.href = url.toString();
                 }
-            } catch(e) {
-                // ignore
-            }
-        });
+            });
         </script>
-        """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
-    # LEER parámetro 'codigo' (si el iframe lo puso)
+    # Leer el parámetro capturado
     params = st.experimental_get_query_params()
-    codigo_param = params.get("codigo", [None])[0]
 
-    if codigo_param:
-        # mostramos resultado y botón para validar/continuar
-        st.session_state.codigo_detectado = str(codigo_param)
+    if "capturado" in params:
+        try:
+            datos = eval(params["capturado"][0])
+            codigo = datos["codigo"]
+            st.session_state.codigo_detectado = codigo
+        except:
+            pass
+
+    # Si ya tenemos un código leido → mostrar UI
+    if st.session_state.codigo_detectado:
         placeholder_result.success(f"✔ Código detectado: {st.session_state.codigo_detectado}")
 
-        # Validamos duplicado localmente contra lo que ya cargamos al inicio
-        if str(st.session_state.codigo_detectado) in st.session_state.codigos_guardados:
-            placeholder_button.error("⚠ Este código ya fue registrado anteriormente.")
-            # opcional: botón para reintentar o reescanear
-            if placeholder_button.button("Reescanear"):
-                # limpiamos el parámetro y recargamos
-                st.experimental_set_query_params()
-                st.session_state.codigo_detectado = None
-                st.rerun()
-        else:
-            if placeholder_button.button("➡ VALIDAR / CONTINUAR"):
-                # pasamos a la fase confirmar con el código listo
-                st.session_state.codigo_escaneado = str(st.session_state.codigo_detectado)
-                # limpiamos query param para evitar re-procesos
-                st.experimental_set_query_params()
-                st.session_state.fase = "confirmar"
-                st.rerun()
+        # BOTÓN QUE TÚ QUIERES
+        if placeholder_button.button("➡ Usar código escaneado"):
+            st.session_state.codigo_escaneado = st.session_state.codigo_detectado
+            st.session_state.fase = "confirmar"
+            st.experimental_set_query_params()  # limpiar URL
+            st.rerun()
 
-    # Divider y opción manual siempre visibles
+    # OPCIÓN MANUAL
     st.markdown("---")
-    st.subheader("¿Problemas con la cámara? — Ingreso manual")
-
-    manual = st.text_input("Ingrese el código manualmente", key="manual_input")
+    manual = st.text_input("Ingreso manual del código")
 
     if st.button("Usar código manual"):
         if manual.strip() == "":
             st.warning("Ingrese un código válido.")
         else:
-            if manual.strip() in st.session_state.codigos_guardados:
-                st.error("⚠ Este código ya fue registrado anteriormente.")
-            else:
-                st.session_state.codigo_escaneado = str(manual.strip())
-                st.session_state.fase = "confirmar"
-                st.rerun()
+            st.session_state.codigo_escaneado = manual.strip()
+            st.session_state.fase = "confirmar"
+            st.rerun()
 
-    # Botón volver
-    if st.button("Volver al formulario principal"):
+    if st.button("Volver"):
         st.session_state.fase = "formulario"
         st.experimental_set_query_params()
         st.rerun()
@@ -307,3 +277,4 @@ elif st.session_state.fase == "confirmar":
         st.session_state.fase = "escaneo"
         st.experimental_set_query_params()
         st.rerun()
+
