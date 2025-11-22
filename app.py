@@ -3,6 +3,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import datetime
+import pytz
 import streamlit.components.v1 as components
 import traceback
 
@@ -212,7 +213,7 @@ elif st.session_state.fase == "escaneo":
         st.rerun()
 
 # ======================================
-# FASE 4: CONFIRMAR Y GUARDAR (VALIDACIONES CORRECTAS)
+# FASE 4: CONFIRMAR Y GUARDAR (UTC-5 COLOMBIA)
 # ======================================
 elif st.session_state.fase == "confirmar":
     st.title("✅ Confirmar registro")
@@ -276,10 +277,12 @@ elif st.session_state.fase == "confirmar":
         st.stop()
 
     # ============================
-    # 3️⃣ GUARDAR SI TODO ES VÁLIDO
+    # 3️⃣ GUARDAR SI TODO ES VÁLIDO (UTC-5)
     # ============================
     if st.button("Guardar registro"):
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # HORA EXACTA DE COLOMBIA (UTC-5)
+        now = datetime.now(pytz.timezone("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
 
         registros.append_row([
             now,
@@ -294,9 +297,3 @@ elif st.session_state.fase == "confirmar":
 
         st.session_state.fase = "formulario"
         st.rerun()
-
-
-
-
-
-
