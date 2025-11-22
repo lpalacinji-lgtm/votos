@@ -267,35 +267,46 @@ elif st.session_state.fase == "confirmar":
     ya_registrado = False
     if not df_registros.empty:
         ya_registrado = documento in df_registros["documento"].astype(str).values
+    # Verificar si el CÓDIGO ya fue usado por alguien más
+    codigo_duplicado = False
+    if not df_registros.empty:
+        
+    # Validaciones
+if ya_registrado:
+    st.error("🚫 Este documento YA registró un código. No puede registrar otro.")
+    if st.button("Volver al inicio"):
+        st.session_state.fase = "formulario"
+        st.rerun()
 
-    if ya_registrado:
-        st.error("🚫 Este documento YA registró un código. No puede registrar otro.")
-        st.info("Si deseas volver al inicio, presiona el botón de abajo.")
+elif codigo_duplicado:
+    st.error("🚫 Este código YA fue registrado por otra persona.")
+    st.info("Use otro código o contacte al administrador.")
 
-        if st.button("Volver al inicio"):
-            st.session_state.fase = "formulario"
-            st.experimental_set_query_params()
-            st.rerun()
+    if st.button("Volver al inicio"):
+        st.session_state.fase = "formulario"
+        st.rerun()
 
-    else:
-        # Si NO está registrado → permitir guardar
-        if st.button("Guardar registro"):
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+else:
+    # Si NO está registrado → permitir guardar
+    if st.button("Guardar registro"):
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            registros.append_row([
-                now,
-                documento,
-                st.session_state.nombre,
-                st.session_state.celular,
-                codigo
-            ])
+        registros.append_row([
+            now,
+            documento,
+            st.session_state.nombre,
+            st.session_state.celular,
+            codigo
+        ])
 
-            st.success("✅ Registro guardado correctamente.")
-            st.balloons()
+        st.success("✅ Registro guardado correctamente.")
+        st.balloons()
 
-            st.session_state.fase = "formulario"
-            st.experimental_set_query_params()
-            st.rerun()
+        st.session_state.fase = "formulario"
+        st.experimental_set_query_params()
+        st.rerun()
+
+
 
 
 
