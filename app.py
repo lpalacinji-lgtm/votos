@@ -136,52 +136,56 @@ elif st.session_state.fase == "escaneo":
     """, unsafe_allow_html=True)
 
     # ESCÁNER
-    components.html(
-        """
-        <html>
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <script src="https://unpkg.com/@zxing/library@latest"></script>
-            <style>
-                video { width:100%; height:260px; border-radius:10px; border:1px solid #ddd; }
-            </style>
-        </head>
-        <body>
-            <video id="video" autoplay muted playsinline></video>
-            <script>
-                (async () => {
-                    const codeReader = new ZXing.BrowserBarcodeReader();
-                    codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
-                        if (result) {
-                            parent.document.getElementById('beep').play();
-                            window.parent.postMessage(
-                                {type:'codigo_leido', codigo: result.text}, "*"
-                            );
-                            codeReader.reset();
-                        }
-                    });
-                })();
-            </script>
-        </body>
-        </html>
-        """,
-        height=320,
-    )
-
-    # Capturar el mensaje del iframe → guardar en sesión sin usar URL
-    st.markdown("""
+components.html(
+    """
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <script src="https://unpkg.com/@zxing/library@latest"></script>
+        <style>
+            video { width:100%; height:260px; border-radius:10px; border:1px solid #ddd; }
+        </style>
+    </head>
+    <body>
+        <video id="video" autoplay muted playsinline></video>
         <script>
-            window.addEventListener("message", (event) => {
-                if (event.data?.type === "codigo_leido") {
-                    const code = event.data.codigo;
-                    const payload = {codigo: code};
-                    const url = new URL(window.location);
-                    url.searchParams.set("capturado", JSON.stringify(payload));
-                    window.location.href = url.toString();
-                }
-            });
+            (async () => {
+                const codeReader = new ZXing.BrowserBarcodeReader();
+                codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
+                    if (result) {
+                        // Sonido
+                        parent.document.getElementById('beep').play();
+
+                        // GUARDAR EN LOCALSTORAGE PARA STREAMLIT
+                        localStorage.setItem("codigo_detectado", result.text);
+
+                        // detener cámara
+                        codeReader.reset();
+                    }
+                });
+            })();
         </script>
-    """, unsafe_allow_html=True)
+    </body>
+    </html>
+    """,
+    height=320,
+)
+
+
+    # Lector del código desde localStorage (no rompe la UI)
+codigo_js = """
+<script>
+    setInterval(() => {
+        const code = localStorage.getItem("codigo_detectado");
+        if (code) {
+            window.parent.postMessage({type:"set_codigo", codigo:code}, "*");
+            localStorage.removeItem("codigo_detectado");
+        }
+    }, 500);
+</script>
+"""
+st.markdown(codigo_js, unsafe_allow_html=True)
+
 
     # Leer el parámetro capturado
     params = st.experimental_get_query_params()
@@ -194,16 +198,24 @@ elif st.session_state.fase == "escaneo":
         except:
             pass
 
-    # Si ya tenemos un código leido → mostrar UI
-    if st.session_state.codigo_detectado:
-        placeholder_result.success(f"✔ Código detectado: {st.session_state.codigo_detectado}")
+    # Capturar mensaje del navegador
+st.markdown("""
+<script>
+window.addEventListener("message", (event) => {
+    if (event.data?.type === "set_codigo") {
+        const url = new URL(window.location);
+        url.searchParams.set("codigo", event.data.codigo);
+        window.location.href = url;
+    }
+});
+</script>
+""", unsafe_allow_html=True)
 
-        # BOTÓN QUE TÚ QUIERES
-        if placeholder_button.button("➡ Usar código escaneado"):
-            st.session_state.codigo_escaneado = st.session_state.codigo_detectado
-            st.session_state.fase = "confirmar"
-            st.experimental_set_query_params()  # limpiar URL
-            st.rerun()
+params = st.experimental_get_query_params()
+if "codigo" in params:
+    st.session_state.codigo_detectado = params["codigo"][0]
+    st.experimental_set_query_params()
+
 
     # OPCIÓN MANUAL
     st.markdown("---")
@@ -268,6 +280,7 @@ elif st.session_state.fase == "confirmar":
             st.session_state.fase = "formulario"
             st.experimental_set_query_params()
             st.rerun()
+
 
 
 
