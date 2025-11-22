@@ -278,12 +278,8 @@ elif st.session_state.fase == "confirmar":
     # ============================
     # 3️⃣ GUARDAR SI TODO ES VÁLIDO
     # ============================
-    from datetime import datetime
-    import pytz
-
-    colombia_tz = pytz.timezone("America/Bogota")
-    now = datetime.now(colombia_tz).strftime("%Y-%m-%d %H:%M:%S")
-
+    if st.button("Guardar registro"):
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         registros.append_row([
             now,
@@ -298,6 +294,8 @@ elif st.session_state.fase == "confirmar":
 
         st.session_state.fase = "formulario"
         st.rerun()
+
+
 
 
 
