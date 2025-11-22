@@ -238,7 +238,7 @@ elif st.session_state.fase == "confirmar":
         st.stop()
 
     # 2️⃣ El código está repetido
-    if not df_reg.empty and codigo in df_reg["codigo"].astype(str).values:
+    if not df_reg.empty and codigo in df_reg["datos escaneados"].astype(str).values:
         st.error("🚫 Este código ya fue registrado por OTRA persona.")
         st.warning("Debe escanear un código diferente.")
 
@@ -267,3 +267,4 @@ elif st.session_state.fase == "confirmar":
 
         st.session_state.fase = "formulario"
         st.rerun()
+
