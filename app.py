@@ -222,59 +222,52 @@ elif st.session_state.fase == "escaneo":
         st.experimental_set_query_params()
         st.rerun()
 
-# -------------------------------
+# ======================================
 # FASE 4: CONFIRMAR Y GUARDAR
-# -------------------------------
+# ======================================
 elif st.session_state.fase == "confirmar":
-    st.title("✅ Confirmar y guardar registro")
-    codigo_para_guardar = st.session_state.get("codigo_escaneado", "")
+    st.title("✅ Código escaneado")
+    codigo = st.session_state.codigo_escaneado
+    documento = st.session_state.documento
 
-    st.info(f"Código a guardar: **{codigo_para_guardar}**")
-    st.write(f"Documento: {st.session_state.get('documento', '')}")
-    st.write(f"Nombre: {st.session_state.get('nombre', '')}")
-    st.write(f"Celular: {st.session_state.get('celular', '')}")
+    st.success(f"Código: {codigo}")
 
-    if st.button("Guardar registro en Google Sheets"):
-        # validaciones
-        if not codigo_para_guardar or codigo_para_guardar.strip() == "":
-            st.error("No hay código para guardar.")
-        else:
-            # convertir todo a str simple para evitar errores JSON serialization
+    # Cargar registros existentes para validar duplicados
+    df_registros = pd.DataFrame(registros.get_all_records())
+
+    # Verificar si el documento ya registró un código
+    ya_registrado = False
+    if not df_registros.empty:
+        ya_registrado = documento in df_registros["documento"].astype(str).values
+
+    if ya_registrado:
+        st.error("🚫 Este documento YA registró un código. No puede registrar otro.")
+        st.info("Si deseas volver al inicio, presiona el botón de abajo.")
+
+        if st.button("Volver al inicio"):
+            st.session_state.fase = "formulario"
+            st.experimental_set_query_params()
+            st.rerun()
+
+    else:
+        # Si NO está registrado → permitir guardar
+        if st.button("Guardar registro"):
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            documento = str(st.session_state.get("documento", ""))
-            nombre = str(st.session_state.get("nombre", ""))
-            celular = str(st.session_state.get("celular", ""))
-            codigo = str(codigo_para_guardar)
 
-            # doble comprobación de duplicado en la hoja (por si otro usuario ya lo guardó)
-            try:
-                vals = registros.get_all_values()
-                existentes = [row[4] for row in vals[1:] if len(row) >= 5 and row[4] != ""]
-                if codigo in existentes or codigo in st.session_state.codigos_guardados:
-                    st.error("⚠ El código ya aparece en los registros. No se guardó duplicado.")
-                else:
-                    try:
-                        registros.append_row([now, documento, nombre, celular, codigo])
-                        st.success("✅ Registro guardado correctamente.")
-                        # actualizar cache local de códigos guardados para evitar duplicados futuros
-                        st.session_state.codigos_guardados.add(codigo)
-                        # volver al inicio
-                        st.session_state.fase = "formulario"
-                        st.experimental_set_query_params()
-                        st.rerun()
-                    except Exception as e:
-                        st.error("Error al guardar en Google Sheets. Revisa permisos / cuota / conexión.")
-                        st.error(str(e))
-                        st.error(traceback.format_exc())
-            except Exception as e:
-                st.error("Error al verificar duplicados en la hoja de registros.")
-                st.error(str(e))
-                st.error(traceback.format_exc())
+            registros.append_row([
+                now,
+                documento,
+                st.session_state.nombre,
+                st.session_state.celular,
+                codigo
+            ])
 
-    if st.button("Volver y reescanear"):
-        st.session_state.codigo_escaneado = None
-        st.session_state.codigo_detectado = None
-        st.session_state.fase = "escaneo"
-        st.experimental_set_query_params()
-        st.rerun()
+            st.success("✅ Registro guardado correctamente.")
+            st.balloons()
+
+            st.session_state.fase = "formulario"
+            st.experimental_set_query_params()
+            st.rerun()
+
+
 
