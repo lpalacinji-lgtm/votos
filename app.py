@@ -212,7 +212,7 @@ elif st.session_state.fase == "escaneo":
         st.rerun()
 
 # ======================================
-# FASE 4: CONFIRMAR Y GUARDAR (+ VALIDACIÓN AVANZADA)
+# FASE 4: CONFIRMAR Y GUARDAR (VALIDACIONES CORRECTAS)
 # ======================================
 elif st.session_state.fase == "confirmar":
     st.title("✅ Confirmar registro")
@@ -225,36 +225,20 @@ elif st.session_state.fase == "confirmar":
     # Cargar registros existentes
     df_reg = pd.DataFrame(registros.get_all_records())
 
-    # ============================
-    # DETECCIÓN AUTOMÁTICA DE COLUMNAS
-    # ============================
-    # (Por si las columnas cambian de nombre)
-
-    cols_doc = [c for c in df_reg.columns if "doc" in c.lower()]
-    cols_nom = [c for c in df_reg.columns if "nombre" in c.lower()]
-    cols_cod = [c for c in df_reg.columns if "escane" in c.lower() or "cod" in c.lower()]
-    cols_fecha = [c for c in df_reg.columns if "fecha" in c.lower() or "hora" in c.lower()]
-
-    col_doc = cols_doc[0] if cols_doc else None
-    col_nom = cols_nom[0] if cols_nom else None
-    col_cod = cols_cod[0] if cols_cod else None
-    col_fecha = cols_fecha[0] if cols_fecha else None
-
-    if not col_doc or not col_cod:
-        st.error("Las columnas necesarias no existen en la hoja 'registros'.")
-        st.write("Columnas encontradas:", df_reg.columns.tolist())
-        st.stop()
+    # Asegurar columnas
+    if df_reg.empty:
+        df_reg = pd.DataFrame(columns=["timestamp", "documento", "nombre completo", "celular", "datos escaneados"])
 
     # ============================
-    # 1️⃣ VALIDAR DOCUMENTO YA REGISTRADO
+    # 1️⃣ VALIDAR SI EL DOCUMENTO YA REGISTRÓ
     # ============================
-    if not df_reg.empty and documento in df_reg[col_doc].astype(str).values:
+    if documento in df_reg["documento"].astype(str).values:
 
-        fila = df_reg[df_reg[col_doc].astype(str) == documento].iloc[0]
+        fila = df_reg[df_reg["documento"].astype(str) == documento].iloc[0]
 
-        nombre_reg = fila[col_nom] if col_nom else "(sin nombre)"
-        codigo_reg = fila[col_cod]
-        fecha_reg = fila[col_fecha] if col_fecha else "(sin fecha)"
+        nombre_reg = fila["nombre completo"]
+        codigo_reg = fila["datos escaneados"]
+        fecha_reg = fila["timestamp"]
 
         st.error("🚫 Este documento YA registró un código.")
 
@@ -269,15 +253,15 @@ elif st.session_state.fase == "confirmar":
         st.stop()
 
     # ============================
-    # 2️⃣ VALIDAR CÓDIGO YA USADO POR OTRO
+    # 2️⃣ VALIDAR SI EL CÓDIGO YA FUE USADO POR OTRO
     # ============================
-    if not df_reg.empty and codigo in df_reg[col_cod].astype(str).values:
+    if codigo in df_reg["datos escaneados"].astype(str).values:
 
-        fila = df_reg[df_reg[col_cod].astype(str) == codigo].iloc[0]
+        fila = df_reg[df_reg["datos escaneados"].astype(str) == codigo].iloc[0]
 
-        doc_usado = fila[col_doc]
-        nombre_usado = fila[col_nom] if col_nom else "(sin nombre)"
-        fecha_usado = fila[col_fecha] if col_fecha else "(sin fecha)"
+        doc_usado = fila["documento"]
+        nombre_usado = fila["nombre completo"]
+        fecha_usado = fila["timestamp"]
 
         st.error("🚫 Este código YA fue registrado por otra persona.")
 
@@ -291,9 +275,9 @@ elif st.session_state.fase == "confirmar":
 
         st.stop()
 
-    # =====================================
+    # ============================
     # 3️⃣ GUARDAR SI TODO ES VÁLIDO
-    # =====================================
+    # ============================
     if st.button("Guardar registro"):
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -311,8 +295,5 @@ elif st.session_state.fase == "confirmar":
         st.session_state.fase = "formulario"
         st.rerun()
 
-
-        st.session_state.fase = "formulario"
-        st.rerun()
 
 
