@@ -21,27 +21,24 @@ sheet = client.open("FormularioEscaneo")
 base_datos = sheet.worksheet("base_datos")
 registros = sheet.worksheet("registros")
 
-# Cargar base de datos
+# Cargar base_datos
 try:
     df = pd.DataFrame(base_datos.get_all_records())
 except Exception:
     df = pd.DataFrame(columns=["documento", "nombre completo", "celular"])
 
-# ======================================
-# VARIABLES DE SESIÓN
-# ======================================
+# Control navegación
 if "fase" not in st.session_state:
     st.session_state.fase = "formulario"
 
 if "codigo_detectado" not in st.session_state:
     st.session_state.codigo_detectado = None
-
 if "codigo_escaneado" not in st.session_state:
     st.session_state.codigo_escaneado = None
 
-# ===========================================================================================
+# -------------------------------
 # FASE 1: FORMULARIO BÚSQUEDA
-# ===========================================================================================
+# -------------------------------
 if st.session_state.fase == "formulario":
     st.title("📋 Formulario con escaneo")
     documento = st.text_input("Número de documento")
@@ -49,6 +46,7 @@ if st.session_state.fase == "formulario":
     if documento:
         resultado = df[df["documento"].astype(str) == documento]
 
+        # Si existe el documento
         if not resultado.empty:
             nombre = resultado.iloc[0]["nombre completo"]
             celular = resultado.iloc[0]["celular"]
@@ -64,17 +62,18 @@ if st.session_state.fase == "formulario":
                 st.session_state.fase = "escaneo"
                 st.rerun()
 
+        # Si NO existe
         else:
-            st.warning("Documento no encontrado en la base de datos.")
+            st.warning("Documento no encontrado.")
 
             if st.button("Registrar nuevo usuario"):
                 st.session_state.nuevo_documento = str(documento)
                 st.session_state.fase = "nuevo_registro"
                 st.rerun()
 
-# ===========================================================================================
-# FASE 2: REGISTRAR NUEVO USUARIO
-# ===========================================================================================
+# -------------------------------
+# FASE 2: NUEVO REGISTRO
+# -------------------------------
 elif st.session_state.fase == "nuevo_registro":
     st.title("📝 Registrar nuevo usuario")
 
@@ -99,7 +98,6 @@ elif st.session_state.fase == "nuevo_registro":
             st.session_state.documento = str(documento)
             st.session_state.nombre = str(nombre)
             st.session_state.celular = str(celular)
-
             st.session_state.fase = "escaneo"
             st.rerun()
 
@@ -107,19 +105,19 @@ elif st.session_state.fase == "nuevo_registro":
         st.session_state.fase = "formulario"
         st.rerun()
 
-# ===========================================================================================
-# FASE 3: ESCANEO CON CÁMARA (100% FUNCIONAL)
-# ===========================================================================================
+# -------------------------------
+# FASE 3: ESCANEO
+# -------------------------------
 elif st.session_state.fase == "escaneo":
     st.title("📷 Escanear código")
     st.markdown("Apunta la cámara al código. Cuando suene, aparecerá el botón para continuar.")
 
-    # Audio beep
+    # Audio
     st.markdown("""
         <audio id="beep" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
     """, unsafe_allow_html=True)
 
-    # Scanner
+    # Escáner
     components.html(
         """
         <html>
@@ -131,73 +129,76 @@ elif st.session_state.fase == "escaneo":
             </style>
         </head>
         <body>
+
             <video id="video" autoplay muted playsinline></video>
+
             <script>
                 (async () => {
-                    const reader = new ZXing.BrowserBarcodeReader();
+                    const codeReader = new ZXing.BrowserBarcodeReader();
 
-                    reader.decodeFromVideoDevice(null, 'video', (result, err) => {
+                    codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
                         if (result) {
                             parent.document.getElementById('beep').play();
                             localStorage.setItem("codigo_detectado", result.text);
-                            reader.reset();
+                            codeReader.reset();
                         }
                     });
                 })();
             </script>
+
         </body>
         </html>
         """,
-        height=340,
+        height=350,
     )
 
-    # Tomar código desde localStorage
+    # Capturar código desde localStorage
     st.markdown("""
-    <script>
-        setInterval(() => {
-            const code = localStorage.getItem("codigo_detectado");
-            if (code) {
-                window.parent.postMessage({type:"set_codigo", codigo:code}, "*");
-                localStorage.removeItem("codigo_detectado");
+        <script>
+            setInterval(() => {
+                const code = localStorage.getItem("codigo_detectado");
+                if (code) {
+                    window.parent.postMessage({type:"set_codigo", codigo:code}, "*");
+                    localStorage.removeItem("codigo_detectado");
+                }
+            }, 500);
+        </script>
+    """, unsafe_allow_html=True)
+
+    # Pasar código a URL
+    st.markdown("""
+        <script>
+        window.addEventListener("message", (event) => {
+            if (event.data?.type === "set_codigo") {
+                const url = new URL(window.location);
+                url.searchParams.set("codigo", event.data.codigo);
+                window.location.href = url;
             }
-        }, 400);
-    </script>
+        });
+        </script>
     """, unsafe_allow_html=True)
 
-    # Pasar código a la URL
-    st.markdown("""
-    <script>
-    window.addEventListener("message", (event) => {
-        if (event.data?.type === "set_codigo") {
-            const url = new URL(window.location);
-            url.searchParams.set("codigo", event.data.codigo);
-            window.location.href = url;
-        }
-    });
-    </script>
-    """, unsafe_allow_html=True)
-
-    # Leer parámetro
+    # Recuperar param
     params = st.experimental_get_query_params()
     if "codigo" in params:
         st.session_state.codigo_detectado = params["codigo"][0]
-        st.experimental_set_query_params()
+        st.experimental_set_query_params()  # limpiar
 
-    # UI si hay código
+    # Mostrar resultado
     if st.session_state.codigo_detectado:
-        codigo = st.session_state.codigo_detectado
-        st.success(f"✔ Código detectado: **{codigo}**")
+        st.success(f"✔ Código detectado: **{st.session_state.codigo_detectado}**")
 
         if st.button("➡ Usar código escaneado"):
-            st.session_state.codigo_escaneado = codigo
+            st.session_state.codigo_escaneado = st.session_state.codigo_detectado
             st.session_state.fase = "confirmar"
             st.rerun()
-
     else:
         st.info("📲 Escanee el código para continuar…")
 
+    # Manual
     st.markdown("---")
     manual = st.text_input("Ingreso manual del código")
+
     if st.button("Usar código manual"):
         if manual.strip() == "":
             st.warning("Ingrese un código válido.")
@@ -210,55 +211,59 @@ elif st.session_state.fase == "escaneo":
         st.session_state.fase = "formulario"
         st.rerun()
 
-# ===========================================================================================
-# FASE 4: CONFIRMAR Y GUARDAR
-# ===========================================================================================
+# ======================================
+# FASE 4: CONFIRMAR Y GUARDAR (+ VALIDACIÓN)
+# ======================================
 elif st.session_state.fase == "confirmar":
-    st.title("✅ Confirmar y guardar")
+    st.title("✅ Confirmar registro")
 
     codigo = st.session_state.codigo_escaneado
     documento = st.session_state.documento
 
-    st.success(f"Código: {codigo}")
+    st.success(f"Código detectado: {codigo}")
 
+    # Cargar registros existentes
     df_reg = pd.DataFrame(registros.get_all_records())
 
-    # Validación 1 → Documento único
-    ya_registrado = False
-    if not df_reg.empty:
-        ya_registrado = documento in df_reg["documento"].astype(str).values
+    # ============================
+    # VALIDACIONES NUEVAS
+    # ============================
 
-    # Validación 2 → Código único
-    codigo_duplicado = False
-    if not df_reg.empty:
-        codigo_duplicado = codigo in df_reg["codigo"].astype(str).values
-
-    if ya_registrado:
+    # 1️⃣ El documento ya registró un código
+    if not df_reg.empty and documento in df_reg["documento"].astype(str).values:
         st.error("🚫 Este documento YA registró un código.")
         if st.button("Volver al inicio"):
             st.session_state.fase = "formulario"
             st.rerun()
+        st.stop()
 
-    elif codigo_duplicado:
-        st.error("🚫 Este código YA fue registrado por otra persona.")
-        if st.button("Volver al inicio"):
-            st.session_state.fase = "formulario"
+    # 2️⃣ El código está repetido
+    if not df_reg.empty and codigo in df_reg["codigo"].astype(str).values:
+        st.error("🚫 Este código ya fue registrado por OTRA persona.")
+        st.warning("Debe escanear un código diferente.")
+
+        if st.button("Volver a escanear"):
+            st.session_state.fase = "escaneo"
             st.rerun()
 
-    else:
-        if st.button("Guardar registro"):
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        st.stop()
 
-            registros.append_row([
-                now,
-                documento,
-                st.session_state.nombre,
-                st.session_state.celular,
-                codigo
-            ])
+    # =====================================
+    # GUARDAR SI TODO ES VÁLIDO
+    # =====================================
+    if st.button("Guardar registro"):
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            st.success("✅ Registro guardado correctamente.")
-            st.balloons()
+        registros.append_row([
+            now,
+            documento,
+            st.session_state.nombre,
+            st.session_state.celular,
+            codigo
+        ])
 
-            st.session_state.fase = "formulario"
-            st.rerun()
+        st.success("✅ Registro guardado correctamente.")
+        st.balloons()
+
+        st.session_state.fase = "formulario"
+        st.rerun()
