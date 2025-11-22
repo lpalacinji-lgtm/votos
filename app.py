@@ -91,12 +91,13 @@ elif st.session_state.fase == "nuevo_registro":
         st.rerun()
 
 # ======================================
-# FASE 3: ESCANEO CON CÁMARA (SIN IFRAME)
+# FASE 3: ESCANEO CON CÁMARA (MEJORADO)
 # ======================================
 elif st.session_state.fase == "escaneo":
     st.title("📷 Escanear código de barras")
     st.markdown("Apunta la cámara al código del certificado electoral.")
 
+    # Cámara + ZXing
     components.html(
         """
         <html>
@@ -130,7 +131,11 @@ elif st.session_state.fase == "escaneo":
                         codeReader.decodeFromVideoDevice(null, "video", (res, err) => {
                             if (res) {
                                 document.getElementById("result").innerText = res.text;
+
+                                // Enviar código a Streamlit
                                 window.parent.postMessage(res.text, "*");
+
+                                // Pausar cámara
                                 codeReader.reset();
                             }
                         });
@@ -148,22 +153,22 @@ elif st.session_state.fase == "escaneo":
         height=450,
     )
 
-    # Recepción de código por URL
-     params = st.query_params
-     codigo = params.get("codigo", [None])[0]
+    # Recibir código desde JS
+    params = st.query_params
+    codigo = params.get("codigo", [None])[0]
 
-    # Si detecta un código, NO pasa de fase inmediatamente
+    # Si llega un código → Mostrar en pantalla + botón continuar
     if codigo:
         st.session_state.codigo_detectado = codigo
-        st.success(f"✔ Código detectado: {codigo}")
 
-    # BOTÓN VALIDAR / CONTINUAR
-    if st.button("➡ VALIDAR / CONTINUAR"):
-        st.session_state.codigo_escaneado = codigo
-        st.session_state.fase = "confirmar"
-        st.experimental_set_query_params()  # limpia parámetro
-        st.rerun()
+        st.success(f"✔ Código escaneado: {codigo}")
 
+        # BOTÓN PARA CONTINUAR
+        if st.button("➡ CONTINUAR / VALIDAR CÓDIGO", type="primary"):
+            st.session_state.codigo_escaneado = codigo
+            st.session_state.fase = "confirmar"
+            st.experimental_set_query_params()  # limpia URL
+            st.rerun()
 
     # Listener JS → Streamlit
     st.markdown(
@@ -179,12 +184,6 @@ elif st.session_state.fase == "escaneo":
         """,
         unsafe_allow_html=True,
     )
-
-    st.write("---")
-    st.subheader("¿Problemas con la cámara?")
-    if st.button("Ingresar código manualmente"):
-        st.session_state.fase = "manual"
-        st.rerun()
 
 # ======================================
 # FASE 4: INGRESO MANUAL
@@ -228,4 +227,5 @@ elif st.session_state.fase == "confirmar":
         st.session_state.fase = "formulario"
         st.experimental_set_query_params()
         st.rerun()
+
 
