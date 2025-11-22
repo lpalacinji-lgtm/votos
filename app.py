@@ -91,100 +91,99 @@ elif st.session_state.fase == "nuevo_registro":
         st.rerun()
 
 # ======================================
-# FASE 3: ESCANEO (FUNCIONAL)
+# FASE 3: ESCANEO CON CÁMARA (MEJORADO)
 # ======================================
 elif st.session_state.fase == "escaneo":
     st.title("📷 Escanear código de barras")
     st.markdown("Apunta la cámara al código del certificado electoral.")
 
-    if "codigo_detectado" not in st.session_state:
-        st.session_state.codigo_detectado = None
-
-    if "codigos_guardados" not in st.session_state:
-        st.session_state.codigos_guardados = []
-
-    placeholder_codigo = st.empty()
-    placeholder_boton = st.empty()
-
-    # 🟢 SONIDO
-    st.markdown("""
-        <audio id="beep">
-            <source src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg" type="audio/ogg">
-        </audio>
-    """, unsafe_allow_html=True)
-
-    # 🟢 IFRAME ESCÁNER 100% FUNCIONAL
-    components.html("""
+    # Cámara + ZXing
+    components.html(
+        """
         <html>
-        <body style="margin:0;">
-            <video id="preview" style="width:100%; height:260px; border:2px solid #4CAF50; border-radius:12px;"></video>
+        <head>
+            <script src="https://unpkg.com/@zxing/library@latest"></script>
+            <style>
+                video {
+                    width: 100%;
+                    max-height: 320px;
+                    border: 2px solid #4CAF50;
+                    border-radius: 10px;
+                }
+                #result {
+                    font-size: 22px;
+                    font-weight: bold;
+                    margin-top: 10px;
+                    text-align: center;
+                    color: #4CAF50;
+                }
+            </style>
+        </head>
+        <body>
+            <video id="video"></video>
+            <p id="result">Escaneando...</p>
 
-            <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
             <script>
-                const codeReader = new ZXing.BrowserBarcodeReader();
-                codeReader.decodeFromVideoDevice(null, 'preview', (result, err) => {
-                    if(result){
-                        // SONIDO
-                        document.getElementById("beep").play();
+                async function startScanner() {
+                    try {
+                        const codeReader = new ZXing.BrowserBarcodeReader();
 
-                        // ENVIAR A STREAMLIT
-                        window.parent.postMessage(JSON.stringify({
-                            type: "codigo",
-                            value: result.text
-                        }), "*");
+                        codeReader.decodeFromVideoDevice(null, "video", (res, err) => {
+                            if (res) {
+                                document.getElementById("result").innerText = res.text;
+
+                                // Enviar código a Streamlit
+                                window.parent.postMessage(res.text, "*");
+
+                                // Pausar cámara
+                                codeReader.reset();
+                            }
+                        });
+                    } catch (error) {
+                        document.getElementById("result").innerText =
+                            "Error accediendo a la cámara: " + error;
                     }
-                });
+                }
+
+                startScanner();
             </script>
         </body>
         </html>
-    """, height=300)
+        """,
+        height=450,
+    )
 
-    # 🟢 RECIBE CÓDIGOS DEL IFRAME
-    st.markdown("""
-        <script>
-        window.addEventListener("message", (event) => {
-            const data = JSON.parse(event.data);
-            if(data.type === "codigo"){
-                const codigo = data.value;
-                window.parent.postMessage(
-                    { isStreamlitMessage: true, type: "streamlit:setComponentValue", value: codigo },
-                    "*"
-                );
-            }
-        });
-        </script>
-    """, unsafe_allow_html=True)
+    # Recibir código desde JS
+    params = st.query_params
+    codigo = params.get("codigo", [None])[0]
 
-    codigo = st.session_state.get("component_value")
-
+    # Si llega un código → Mostrar en pantalla + botón continuar
     if codigo:
         st.session_state.codigo_detectado = codigo
-        placeholder_codigo.success(f"📌 Código detectado: **{codigo}**")
 
-        if codigo in st.session_state.codigos_guardados:
-            placeholder_boton.error("⚠️ Este código ya existe.")
-        else:
-            if placeholder_boton.button("Continuar ➜", type="primary"):
-                st.session_state.codigos_guardados.append(codigo)
-                st.session_state.codigo_escaneado = codigo
-                st.session_state.fase = "confirmar"
-                st.rerun()
+        st.success(f"✔ Código escaneado: {codigo}")
 
-    st.divider()
-    st.subheader("Ingreso manual")
-
-    manual = st.text_input("Digite el número del código", max_chars=30)
-
-    if st.button("Guardar código manual"):
-        if manual.strip() == "":
-            st.warning("Debe ingresar un valor.")
-        elif manual in st.session_state.codigos_guardados:
-            st.error("⚠️ Este código ya fue registrado.")
-        else:
-            st.session_state.codigo_escaneado = manual
-            st.session_state.codigos_guardados.append(manual)
+        # BOTÓN PARA CONTINUAR
+        if st.button("➡ CONTINUAR / VALIDAR CÓDIGO", type="primary"):
+            st.session_state.codigo_escaneado = codigo
             st.session_state.fase = "confirmar"
+            st.experimental_set_query_params()  # limpia URL
             st.rerun()
+
+    # Listener JS → Streamlit
+    st.markdown(
+        """
+        <script>
+        window.addEventListener("message", (event) => {
+            const codigo = event.data;
+            const url = new URL(window.location);
+            url.searchParams.set("codigo", codigo);
+            window.location.href = url.toString();
+        });
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # ======================================
 # FASE 4: INGRESO MANUAL
@@ -228,7 +227,6 @@ elif st.session_state.fase == "confirmar":
         st.session_state.fase = "formulario"
         st.experimental_set_query_params()
         st.rerun()
-
 
 
 
