@@ -238,7 +238,7 @@ elif st.session_state.fase == "confirmar":
         fila = df_reg[df_reg["documento"].astype(str) == documento].iloc[0]
 
         nombre_reg = fila["nombre completo"]
-        codigo_reg = fila["datos escaneados"]
+        codigo_reg = fila["documento"]
         fecha_reg = fila["timestamp"]
 
         st.error("🚫 Este documento YA registró un código.")
@@ -297,4 +297,5 @@ elif st.session_state.fase == "confirmar":
 
         st.session_state.fase = "formulario"
         st.rerun()
+
 
