@@ -149,14 +149,21 @@ elif st.session_state.fase == "escaneo":
     )
 
     # Recepción de código por URL
-    params = st.query_params
-    codigo = params.get("codigo", [None])[0]
+     params = st.query_params
+     codigo = params.get("codigo", [None])[0]
 
+    # Si detecta un código, NO pasa de fase inmediatamente
     if codigo:
+        st.session_state.codigo_detectado = codigo
+        st.success(f"✔ Código detectado: {codigo}")
+
+    # BOTÓN VALIDAR / CONTINUAR
+    if st.button("➡ VALIDAR / CONTINUAR"):
         st.session_state.codigo_escaneado = codigo
         st.session_state.fase = "confirmar"
-        st.experimental_set_query_params()
+        st.experimental_set_query_params()  # limpia parámetro
         st.rerun()
+
 
     # Listener JS → Streamlit
     st.markdown(
@@ -221,3 +228,4 @@ elif st.session_state.fase == "confirmar":
         st.session_state.fase = "formulario"
         st.experimental_set_query_params()
         st.rerun()
+
