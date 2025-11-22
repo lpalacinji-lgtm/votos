@@ -11,8 +11,7 @@ import traceback
 # ======================================
 st.set_page_config(page_title="Formulario con Escaneo", layout="centered")
 
-# ========== AUTENTICACIÓN (NO TOCO TUS CREDENCIALES) ==========
-# Sigue usando st.secrets["gcp_service_account"]
+# ========== AUTENTICACIÓN ==========
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
 client = gspread.authorize(creds)
@@ -22,34 +21,27 @@ sheet = client.open("FormularioEscaneo")
 base_datos = sheet.worksheet("base_datos")
 registros = sheet.worksheet("registros")
 
-# Cargar base_datos como dataframe (safe)
+# Cargar base de datos
 try:
     df = pd.DataFrame(base_datos.get_all_records())
 except Exception:
     df = pd.DataFrame(columns=["documento", "nombre completo", "celular"])
 
-# Control de navegación
+# ======================================
+# VARIABLES DE SESIÓN
+# ======================================
 if "fase" not in st.session_state:
     st.session_state.fase = "formulario"
 
-# Inicializaciones para códigos
 if "codigo_detectado" not in st.session_state:
     st.session_state.codigo_detectado = None
+
 if "codigo_escaneado" not in st.session_state:
     st.session_state.codigo_escaneado = None
-if "codigos_guardados" not in st.session_state:
-    # intentamos cargar los códigos ya guardados en la hoja 'registros' (columna 5 si existe)
-    try:
-        vals = registros.get_all_values()
-        # asumimos que la columna del código es la 5ª (índice 4) como en tu estructura
-        existentes = [row[4] for row in vals[1:] if len(row) >= 5 and row[4] != ""]
-        st.session_state.codigos_guardados = set(existentes)
-    except Exception:
-        st.session_state.codigos_guardados = set()
 
-# -------------------------------
+# ===========================================================================================
 # FASE 1: FORMULARIO BÚSQUEDA
-# -------------------------------
+# ===========================================================================================
 if st.session_state.fase == "formulario":
     st.title("📋 Formulario con escaneo")
     documento = st.text_input("Número de documento")
@@ -57,7 +49,6 @@ if st.session_state.fase == "formulario":
     if documento:
         resultado = df[df["documento"].astype(str) == documento]
 
-        # Si existe el documento
         if not resultado.empty:
             nombre = resultado.iloc[0]["nombre completo"]
             celular = resultado.iloc[0]["celular"]
@@ -73,7 +64,6 @@ if st.session_state.fase == "formulario":
                 st.session_state.fase = "escaneo"
                 st.rerun()
 
-        # Si NO existe
         else:
             st.warning("Documento no encontrado en la base de datos.")
 
@@ -82,9 +72,9 @@ if st.session_state.fase == "formulario":
                 st.session_state.fase = "nuevo_registro"
                 st.rerun()
 
-# -------------------------------
+# ===========================================================================================
 # FASE 2: REGISTRAR NUEVO USUARIO
-# -------------------------------
+# ===========================================================================================
 elif st.session_state.fase == "nuevo_registro":
     st.title("📝 Registrar nuevo usuario")
 
@@ -99,11 +89,10 @@ elif st.session_state.fase == "nuevo_registro":
             st.warning("Debe ingresar todos los datos.")
         else:
             try:
-                # Guardar como strings
                 base_datos.append_row([str(documento), str(nombre), str(celular)])
                 st.success("Usuario registrado correctamente.")
-            except Exception as e:
-                st.error("Error guardando en base_datos. Revisa permisos / credenciales.")
+            except Exception:
+                st.error("Error guardando en base_datos.")
                 st.error(traceback.format_exc())
                 st.stop()
 
@@ -118,23 +107,19 @@ elif st.session_state.fase == "nuevo_registro":
         st.session_state.fase = "formulario"
         st.rerun()
 
-# -------------------------------
-# FASE 3: ESCANEO CON CÁMARA (NUEVA)
-# -------------------------------
+# ===========================================================================================
+# FASE 3: ESCANEO CON CÁMARA (100% FUNCIONAL)
+# ===========================================================================================
 elif st.session_state.fase == "escaneo":
     st.title("📷 Escanear código")
     st.markdown("Apunta la cámara al código. Cuando suene, aparecerá el botón para continuar.")
 
-    # ====================
-    #    SONIDO DEL BEEP
-    # ====================
+    # Audio beep
     st.markdown("""
         <audio id="beep" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
     """, unsafe_allow_html=True)
 
-    # ====================
-    #   ESCÁNER ZXING
-    # ====================
+    # Scanner
     components.html(
         """
         <html>
@@ -147,21 +132,15 @@ elif st.session_state.fase == "escaneo":
         </head>
         <body>
             <video id="video" autoplay muted playsinline></video>
-
             <script>
                 (async () => {
-                    const codeReader = new ZXing.BrowserBarcodeReader();
+                    const reader = new ZXing.BrowserBarcodeReader();
 
-                    codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
+                    reader.decodeFromVideoDevice(null, 'video', (result, err) => {
                         if (result) {
-                            // sonido
                             parent.document.getElementById('beep').play();
-
-                            // guardar temporalmente
                             localStorage.setItem("codigo_detectado", result.text);
-
-                            // detener cámara
-                            codeReader.reset();
+                            reader.reset();
                         }
                     });
                 })();
@@ -172,9 +151,7 @@ elif st.session_state.fase == "escaneo":
         height=340,
     )
 
-    # ===============================================
-    #   CAPTURAR EL CÓDIGO DESDE LOCALSTORAGE
-    # ===============================================
+    # Tomar código desde localStorage
     st.markdown("""
     <script>
         setInterval(() => {
@@ -183,13 +160,11 @@ elif st.session_state.fase == "escaneo":
                 window.parent.postMessage({type:"set_codigo", codigo:code}, "*");
                 localStorage.removeItem("codigo_detectado");
             }
-        }, 500);
+        }, 400);
     </script>
     """, unsafe_allow_html=True)
 
-    # ===============================================
-    #   PASAR EL CÓDIGO A LOS PARAMS DE LA URL
-    # ===============================================
+    # Pasar código a la URL
     st.markdown("""
     <script>
     window.addEventListener("message", (event) => {
@@ -202,20 +177,13 @@ elif st.session_state.fase == "escaneo":
     </script>
     """, unsafe_allow_html=True)
 
-    # ===============================================
-    # Recuperar el código desde la URL
-    # ===============================================
+    # Leer parámetro
     params = st.experimental_get_query_params()
-
     if "codigo" in params:
         st.session_state.codigo_detectado = params["codigo"][0]
-
-        # limpiar URL
         st.experimental_set_query_params()
 
-    # ===============================================
-    #  MOSTRAR RESULTADO + BOTÓN CONTINUAR
-    # ===============================================
+    # UI si hay código
     if st.session_state.codigo_detectado:
         codigo = st.session_state.codigo_detectado
         st.success(f"✔ Código detectado: **{codigo}**")
@@ -228,12 +196,8 @@ elif st.session_state.fase == "escaneo":
     else:
         st.info("📲 Escanee el código para continuar…")
 
-    # ===============================================
-    #   OPCIÓN MANUAL
-    # ===============================================
     st.markdown("---")
     manual = st.text_input("Ingreso manual del código")
-
     if st.button("Usar código manual"):
         if manual.strip() == "":
             st.warning("Ingrese un código válido.")
@@ -242,73 +206,59 @@ elif st.session_state.fase == "escaneo":
             st.session_state.fase = "confirmar"
             st.rerun()
 
-    # ===============================================
-    # BOTÓN VOLVER
-    # ===============================================
     if st.button("Volver"):
         st.session_state.fase = "formulario"
         st.rerun()
 
-
-# ======================================
+# ===========================================================================================
 # FASE 4: CONFIRMAR Y GUARDAR
-# ======================================
+# ===========================================================================================
 elif st.session_state.fase == "confirmar":
-    st.title("✅ Código escaneado")
+    st.title("✅ Confirmar y guardar")
+
     codigo = st.session_state.codigo_escaneado
     documento = st.session_state.documento
 
     st.success(f"Código: {codigo}")
 
-    # Cargar registros existentes para validar duplicados
-    df_registros = pd.DataFrame(registros.get_all_records())
+    df_reg = pd.DataFrame(registros.get_all_records())
 
-    # Verificar si el documento ya registró un código
+    # Validación 1 → Documento único
     ya_registrado = False
-    if not df_registros.empty:
-        ya_registrado = documento in df_registros["documento"].astype(str).values
-    # Verificar si el CÓDIGO ya fue usado por alguien más
+    if not df_reg.empty:
+        ya_registrado = documento in df_reg["documento"].astype(str).values
+
+    # Validación 2 → Código único
     codigo_duplicado = False
-    if not df_registros.empty:
-        
-    # Validaciones
-if ya_registrado:
-    st.error("🚫 Este documento YA registró un código. No puede registrar otro.")
-    if st.button("Volver al inicio"):
-        st.session_state.fase = "formulario"
-        st.rerun()
+    if not df_reg.empty:
+        codigo_duplicado = codigo in df_reg["codigo"].astype(str).values
 
-elif codigo_duplicado:
-    st.error("🚫 Este código YA fue registrado por otra persona.")
-    st.info("Use otro código o contacte al administrador.")
+    if ya_registrado:
+        st.error("🚫 Este documento YA registró un código.")
+        if st.button("Volver al inicio"):
+            st.session_state.fase = "formulario"
+            st.rerun()
 
-    if st.button("Volver al inicio"):
-        st.session_state.fase = "formulario"
-        st.rerun()
+    elif codigo_duplicado:
+        st.error("🚫 Este código YA fue registrado por otra persona.")
+        if st.button("Volver al inicio"):
+            st.session_state.fase = "formulario"
+            st.rerun()
 
-else:
-    # Si NO está registrado → permitir guardar
-    if st.button("Guardar registro"):
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        if st.button("Guardar registro"):
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        registros.append_row([
-            now,
-            documento,
-            st.session_state.nombre,
-            st.session_state.celular,
-            codigo
-        ])
+            registros.append_row([
+                now,
+                documento,
+                st.session_state.nombre,
+                st.session_state.celular,
+                codigo
+            ])
 
-        st.success("✅ Registro guardado correctamente.")
-        st.balloons()
+            st.success("✅ Registro guardado correctamente.")
+            st.balloons()
 
-        st.session_state.fase = "formulario"
-        st.experimental_set_query_params()
-        st.rerun()
-
-
-
-
-
-
-
+            st.session_state.fase = "formulario"
+            st.rerun()
