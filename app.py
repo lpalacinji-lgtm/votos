@@ -8,14 +8,14 @@ import streamlit.components.v1 as components
 # ======================================
 # CONFIGURACIÓN GENERAL
 # ======================================
-st.set_page_config(page_title="Formulario con escaneo", layout="centered")
+st.set_page_config(page_title="Formulario con Escaneo", layout="centered")
 
-# Autenticación
+# Autenticación Google Sheets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
 client = gspread.authorize(creds)
 
-# Hojas
+# Hojas de cálculo
 sheet = client.open("FormularioEscaneo")
 base_datos = sheet.worksheet("base_datos")
 registros = sheet.worksheet("registros")
@@ -26,7 +26,7 @@ if "fase" not in st.session_state:
     st.session_state.fase = "formulario"
 
 # ======================================
-# FASE 1: FORMULARIO BÚSQUEDA
+# FASE 1: BÚSQUEDA DE DOCUMENTO
 # ======================================
 if st.session_state.fase == "formulario":
     st.title("📋 Formulario con escaneo")
@@ -35,7 +35,7 @@ if st.session_state.fase == "formulario":
     if documento:
         resultado = df[df["documento"].astype(str) == documento]
 
-        # Si existe el documento
+        # SI existe
         if not resultado.empty:
             nombre = resultado.iloc[0]["nombre completo"]
             celular = resultado.iloc[0]["celular"]
@@ -51,7 +51,7 @@ if st.session_state.fase == "formulario":
                 st.session_state.fase = "escaneo"
                 st.rerun()
 
-        # Si NO existe
+        # SI NO existe → Registrar nuevo usuario
         else:
             st.warning("Documento no encontrado en la base de datos.")
 
@@ -91,42 +91,64 @@ elif st.session_state.fase == "nuevo_registro":
         st.rerun()
 
 # ======================================
-# FASE 3: ESCANEO CON CÁMARA
+# FASE 3: ESCANEO CON CÁMARA (SIN IFRAME)
 # ======================================
 elif st.session_state.fase == "escaneo":
     st.title("📷 Escanear código de barras")
     st.markdown("Apunta la cámara al código del certificado electoral.")
 
-    # Escáner ZXing
     components.html(
         """
-        <iframe srcdoc='
         <html>
         <head>
-            <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
+            <script src="https://unpkg.com/@zxing/library@latest"></script>
+            <style>
+                video {
+                    width: 100%;
+                    max-height: 320px;
+                    border: 2px solid #4CAF50;
+                    border-radius: 10px;
+                }
+                #result {
+                    font-size: 22px;
+                    font-weight: bold;
+                    margin-top: 10px;
+                    text-align: center;
+                    color: #4CAF50;
+                }
+            </style>
         </head>
         <body>
-            <video id="video" width="100%" height="300" style="border:1px solid gray;"></video>
-            <p id="result">Esperando escaneo...</p>
+            <video id="video"></video>
+            <p id="result">Escaneando...</p>
+
             <script>
-                const codeReader = new ZXing.BrowserBarcodeReader();
-                codeReader.decodeFromVideoDevice(null, "video", (result, err) => {
-                    if (result) {
-                        document.getElementById("result").innerText = result.text;
-                        window.parent.postMessage(result.text, "*");
-                        codeReader.reset();
+                async function startScanner() {
+                    try {
+                        const codeReader = new ZXing.BrowserBarcodeReader();
+
+                        codeReader.decodeFromVideoDevice(null, "video", (res, err) => {
+                            if (res) {
+                                document.getElementById("result").innerText = res.text;
+                                window.parent.postMessage(res.text, "*");
+                                codeReader.reset();
+                            }
+                        });
+                    } catch (error) {
+                        document.getElementById("result").innerText =
+                            "Error accediendo a la cámara: " + error;
                     }
-                });
+                }
+
+                startScanner();
             </script>
         </body>
-        </html>'
-        width="100%" height="400" style="border:none;" allow="camera">
-        </iframe>
+        </html>
         """,
-        height=420,
+        height=450,
     )
 
-    # Parámetros URL
+    # Recepción de código por URL
     params = st.query_params
     codigo = params.get("codigo", [None])[0]
 
@@ -136,6 +158,7 @@ elif st.session_state.fase == "escaneo":
         st.experimental_set_query_params()
         st.rerun()
 
+    # Listener JS → Streamlit
     st.markdown(
         """
         <script>
@@ -150,16 +173,14 @@ elif st.session_state.fase == "escaneo":
         unsafe_allow_html=True,
     )
 
-    # ---- OPCIÓN MANUAL ----
     st.write("---")
     st.subheader("¿Problemas con la cámara?")
-
     if st.button("Ingresar código manualmente"):
         st.session_state.fase = "manual"
         st.rerun()
 
 # ======================================
-# FASE 4: INGRESO MANUAL DEL CÓDIGO
+# FASE 4: INGRESO MANUAL
 # ======================================
 elif st.session_state.fase == "manual":
     st.title("✍️ Ingreso manual del código")
@@ -196,7 +217,7 @@ elif st.session_state.fase == "confirmar":
             st.session_state.codigo_escaneado
         ])
 
-        st.success("✅ Registro guardado correctamente.")
+        st.success("Registro guardado correctamente.")
         st.session_state.fase = "formulario"
         st.experimental_set_query_params()
         st.rerun()
