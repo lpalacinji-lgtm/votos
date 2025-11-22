@@ -59,6 +59,29 @@ if st.session_state.fase == "formulario":
             st.session_state.nombre = str(nombre)
             st.session_state.celular = str(celular)
 
+            # ============================
+            # 🔥 VALIDACIÓN AGREGADA: Ya tiene registro previo
+            # ============================
+            df_reg = pd.DataFrame(registros.get_all_records())
+
+            if not df_reg.empty:
+                if documento in df_reg["documento"].astype(str).values:
+
+                    fila = df_reg[df_reg["documento"].astype(str) == str(documento)].iloc[0]
+
+                    st.error("🚫 Este documento YA registró un código previamente.")
+
+                    st.info(f"🧾 Código registrado: **{fila['datos escaneados']}**")
+                    st.info(f"📅 Fecha registro: **{fila['timestamp']}**")
+
+                    st.warning("⛔ No puede volver a registrarse.")
+
+                    if st.button("Volver al inicio"):
+                        st.rerun()
+
+                    st.stop()
+
+            # Si no tiene registro previo → continuar
             if st.button("Siguiente: escanear código"):
                 st.session_state.fase = "escaneo"
                 st.rerun()
@@ -216,7 +239,6 @@ elif st.session_state.fase == "escaneo":
 # FASE 4: CONFIRMAR Y GUARDAR (UTC-5 COLOMBIA)
 # ======================================
 
-
 elif st.session_state.fase == "confirmar":
     st.title("✅ Confirmar registro")
 
@@ -233,7 +255,7 @@ elif st.session_state.fase == "confirmar":
         df_reg = pd.DataFrame(columns=["timestamp", "documento", "nombre completo", "celular", "datos escaneados"])
 
     # ============================
-    # 1️⃣ VALIDAR SI EL DOCUMENTO YA REGISTRÓ
+    # 1️⃣ VALIDAR DOCUMENTO YA REGISTRADO
     # ============================
     if documento in df_reg["documento"].astype(str).values:
 
@@ -252,12 +274,10 @@ elif st.session_state.fase == "confirmar":
         if st.button("Volver al inicio"):
             st.session_state.fase = "formulario"
             st.rerun()
-        st.write(df_reg.columns.tolist())
         st.stop()
-        
 
     # ============================
-    # 2️⃣ VALIDAR SI EL CÓDIGO YA FUE USADO POR OTRO
+    # 2️⃣ VALIDAR CÓDIGO YA USADO
     # ============================
     if codigo in df_reg["datos escaneados"].astype(str).values:
 
@@ -280,7 +300,7 @@ elif st.session_state.fase == "confirmar":
         st.stop()
 
     # ============================
-    # 3️⃣ GUARDAR SI TODO ES VÁLIDO (UTC-5)
+    # 3️⃣ GUARDAR REGISTRO
     # ============================
     if st.button("Guardar registro"):
 
@@ -300,9 +320,3 @@ elif st.session_state.fase == "confirmar":
 
         st.session_state.fase = "formulario"
         st.rerun()
-
-
-
-
-
-
